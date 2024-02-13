@@ -480,37 +480,50 @@ bool recv_snmp(void) {
   oid[0]='\0';
   pdu.value.OID.toString(oid, sizeof(oid)-1);
 
-  if(strncmp(tx_oid, oid, strlen(tx_oid))==0) {
-    pdu.value.decode(&data);
-    if(tx_bytes_last) {
-      traffic_up = (data - tx_bytes_last) * 8 / 10000 / ((millis() - tx_bytes_when) / 1000);
-      debug("traffic_up: %lu - %lu = %lu (%lu in %lums)", data, tx_bytes_last, traffic_up, data-tx_bytes_last, millis()-tx_bytes_when);
-    }
-    tx_bytes_last = data;
-    tx_bytes_when = millis();
-  } else if(strncmp(rx_oid, oid, strlen(rx_oid))==0) {
-    pdu.value.decode(&data);
-    if(rx_bytes_last) {
-      traffic_down = (data - rx_bytes_last) * 8 / 10000 / ((millis() - rx_bytes_when) / 1000);
-      debug("traffic_down: %lu - %lu = %lu (%lu in %lums)", data, rx_bytes_last, traffic_down, data-rx_bytes_last, millis()-rx_bytes_when);
-    }
-    rx_bytes_last = data;
-    rx_bytes_when = millis();
-  } else if(strncmp(ifdescr_oid, oid, strlen(ifdescr_oid))==0) {
-    pdu.value.decode(str, sizeof(str) - 1);
-    debug("found %s at ifnum %d", str, ifnum);
-    if(strcmp(str, ifname)==0) {
-      return true;
-    } else {
+  switch(current_state) {
+    case STATE_OK:
+      if(strncmp(tx_oid, oid, strlen(tx_oid))==0) {
+        pdu.value.decode(&data);
+        debug("  tx_oid response received");
+        if(tx_bytes_last) {
+          traffic_up = (data - tx_bytes_last) * 8 / 10000 / ((millis() - tx_bytes_when) / 1000);
+          debug("    traffic_up: %lu - %lu = %lu (%lu in %lums)", data, tx_bytes_last, traffic_up, data-tx_bytes_last, millis()-tx_bytes_when);
+        }
+        tx_bytes_last = data;
+        tx_bytes_when = millis();
+      } else if(strncmp(rx_oid, oid, strlen(rx_oid))==0) {
+        pdu.value.decode(&data);
+        debug("  rx_oid response received");
+        if(rx_bytes_last) {
+          traffic_down = (data - rx_bytes_last) * 8 / 10000 / ((millis() - rx_bytes_when) / 1000);
+          debug("    traffic_down: %lu - %lu = %lu (%lu in %lums)", data, rx_bytes_last, traffic_down, data-rx_bytes_last, millis()-rx_bytes_when);
+        }
+        rx_bytes_last = data;
+        rx_bytes_when = millis();
+      }
+      break;
+
+    case STATE_IFTABLE:
+      if(strncmp(ifdescr_oid, oid, strlen(ifdescr_oid))==0) {
+        pdu.value.decode(str, sizeof(str) - 1);
+        debug("  found %s at ifnum %d", str, ifnum);
+        if(strcmp(str, ifname)==0) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+      break;
+
+    default:
+      debug("  no idea what to do with %s", oid);
       return false;
-    }
-  } else {
-    debug("no idea what to do with %s", oid);
-    return false;
   }
+  
 
   last_comm = millis();
 
+  debug("  returning true");
   return true;
 }
 
@@ -624,7 +637,7 @@ void loop() {
           new_state(STATE_OK);
         } else {
           if(! send_snmp_iftable()) {
-            // We couldn't find the ppp0 interface
+            // We couldn't find an interface with the name we want
             debug("*** %s not found!", ifname);
             new_state(STATE_NO_IF);
           }
@@ -634,7 +647,7 @@ void loop() {
 
     case STATE_NO_IF:
       // Hang forever, we're knackered
-      return;
+      break;
 
     default:
       if(SNMP.listen()) {
@@ -662,22 +675,24 @@ void loop() {
       break;
   }
 
-  if(millis() - last_comm > GENERAL_TIMEOUT) {
-    new_state(STATE_NO_COMM);
-  } else if(millis() - last_ping > GENERAL_TIMEOUT) {
-    new_state(STATE_NO_INTERNET);
-  } else {
-    if(current_state != STATE_CONNECTING && current_state != STATE_IFTABLE) {
-      if(ping_time > ping_critical) {
-        new_state(STATE_CRITICAL);
-      } else if(ping_time > ping_warn) {
-        new_state(STATE_WARNING);
-      } else {
-        new_state(STATE_OK);
+  if(current_state != STATE_NO_IF) {
+    if(millis() - last_comm > GENERAL_TIMEOUT) {
+      new_state(STATE_NO_COMM);
+    } else if(millis() - last_ping > GENERAL_TIMEOUT) {
+      new_state(STATE_NO_INTERNET);
+    } else {
+      if(current_state != STATE_CONNECTING && current_state != STATE_IFTABLE) {
+        if(ping_time > ping_critical) {
+          new_state(STATE_CRITICAL);
+        } else if(ping_time > ping_warn) {
+          new_state(STATE_WARNING);
+        } else {
+          new_state(STATE_OK);
+        }
       }
     }
   }
-
+  
   if(digitalRead(MODE_BUTTON) == LOW) {
     if(! mode_button_down) {
       mode_button_down = millis();
