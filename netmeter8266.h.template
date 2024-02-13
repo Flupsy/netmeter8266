@@ -14,3 +14,7 @@ const char *snmp_community = "public";		// "public", or something else
 const char *ntp_server  = "pool.ntp.org";	// or a local NTP server
 
 const char *ifname      = "eth0"; // we look for an interface with this name at startup
+
+const char *unifi_api   = "https://my-unifi-controller.example.org:8443/v2/api";
+const char *unifi_username = "";
+const char *unifi_password = "";

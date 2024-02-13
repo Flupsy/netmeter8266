@@ -1,10 +1,12 @@
-#include <ESP8266WiFi.h>
-#include <Pinger.h>
+#include <WiFi.h>
+#include <ESP32Ping.h>
 #include <WiFiUDP.h>
 #include <NTPClient.h>
+#include <AsyncHTTPSRequest_Generic.h>
+#include <ArduinoJson.h>
 #include "TM1637DisplayAlnum.h"
 #include "ArduinoSNMP.h"
-#include "netmeter.h"
+#include "netmeter8266.h"
 
 #define DEBUG
 
@@ -19,6 +21,9 @@ const int MAX_IFTABLE_NUMBER  = 24;
 // NTP stuff
 WiFiUDP ntpUDP;
 NTPClient ntp(ntpUDP, ntp_server, 0);
+
+// Unifi API stuff
+AsyncHTTPRequest unifi_request;
 
 // Webserver stuff
 WiFiServer server(80);            // run a 'webserver' on this port
@@ -282,6 +287,10 @@ void ping_setup(void) {
 }
 
 
+void unifi_setup(void) {
+  unifi_request.onReadyStateChange(unifi_api_callback);
+}
+
 void send_ping(void) {
   pinger.Ping(ping_target, 1);
 }
@@ -306,6 +315,7 @@ void setup() {
   WiFi.begin(wifi_network_name, wifi_network_password);
 
   ping_setup();
+  unifi_setup();
 }
 
 
@@ -349,6 +359,32 @@ bool send_snmp_iftable(void) {
   display_rx.showNumberDecEx(ifnum, 0b11100000);
 
   return true;
+}
+
+
+void unifi_authenticate(const char *uri, const char *username, const char *password) {
+  
+}
+void unifi_send_api_request(const char *uri) {
+  if (unifi_request.readyState() == readyStateUnsent || unifi_request.readyState() == readyStateDone) {
+    if(unifi_request.open("GET", uri)) {
+      debug("sending API request to %s", uri);
+      unifi_request.send();
+    } else {
+      debug("FAILED sending API request");
+    }
+  }
+}
+
+
+void unifi_api_callback(void *optParm, AsyncHTTPRequest *request, int readyState) {
+  if(readyState == readyStateDone) {
+    if(request->responseHTTPcode() == 200) {
+      debug("unifi API good response");
+    } else {
+      debug("unifi API bad response code %d", request->responseHTTPcode());
+    }
+  }
 }
 
 
@@ -649,6 +685,7 @@ void loop() {
         if(! --get_stats_countdown) {
           send_snmp(tx_oid, ifnum);
           send_snmp(rx_oid, ifnum);
+          unifi_send_api_request(unifi_api_status);
           
           get_stats_countdown = 5;
         }
