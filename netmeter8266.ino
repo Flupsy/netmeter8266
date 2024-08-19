@@ -241,10 +241,10 @@ void mode_stats(void) {
           display_ping.showNumberDecEx(ping_time);
         }
         if(update_traffic_up) {
-          display_tx.showNumberDecEx((traffic_up >= 10000) ? -traffic_up : traffic_up, (traffic_up > 99 && traffic_up < 100000) ? 0b11100000 : 0);
+          display_tx.showNumberDecEx((traffic_up >= 10000) ? traffic_up/100 : traffic_up, (traffic_up > 99 && traffic_up < 10000) ? 0b11100000 : 0);
         }
         if(update_traffic_down) {
-          display_rx.showNumberDecEx((traffic_down >= 10000)? -traffic_down : traffic_down, (traffic_down > 99 && traffic_down < 100000) ? 0b11100000 : 0);
+          display_rx.showNumberDecEx((traffic_down >= 10000)? traffic_down/100 : traffic_down, (traffic_down > 99 && traffic_down < 10000) ? 0b11100000 : 0);
         }
 
         break;
