@@ -481,7 +481,19 @@ bool recv_snmp(void) {
   pdu.value.OID.toString(oid, sizeof(oid)-1);
 
   switch(current_state) {
-    case STATE_OK:
+    case STATE_IFTABLE:
+      if(strncmp(ifdescr_oid, oid, strlen(ifdescr_oid))==0) {
+        pdu.value.decode(str, sizeof(str) - 1);
+        debug("  found %s at ifnum %d", str, ifnum);
+        if(strcmp(str, ifname)==0) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+      break;
+
+    default:
       if(strncmp(tx_oid, oid, strlen(tx_oid))==0) {
         pdu.value.decode(&data);
         debug("  tx_oid response received");
@@ -500,24 +512,11 @@ bool recv_snmp(void) {
         }
         rx_bytes_last = data;
         rx_bytes_when = millis();
-      }
+      } else {
+        debug("  no idea what to do with %s", oid);
+        return false;
+      } 
       break;
-
-    case STATE_IFTABLE:
-      if(strncmp(ifdescr_oid, oid, strlen(ifdescr_oid))==0) {
-        pdu.value.decode(str, sizeof(str) - 1);
-        debug("  found %s at ifnum %d", str, ifnum);
-        if(strcmp(str, ifname)==0) {
-          return true;
-        } else {
-          return false;
-        }
-      }
-      break;
-
-    default:
-      debug("  no idea what to do with %s", oid);
-      return false;
   }
   
 
@@ -675,7 +674,7 @@ void loop() {
       break;
   }
 
-  if(current_state != STATE_NO_IF) {
+  if(current_state != STATE_NO_IF && current_state != STATE_IFTABLE && current_state != STATE_CONNECTING) {
     if(millis() - last_comm > GENERAL_TIMEOUT) {
       new_state(STATE_NO_COMM);
     } else if(millis() - last_ping > GENERAL_TIMEOUT) {
